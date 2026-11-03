@@ -1,0 +1,48 @@
+name: Sync Upstream
+
+on:
+  schedule:
+    # 每 12 小时自动同步一次 (UTC 00:00, 12:00)
+    - cron: '0 */12 * * *'
+  workflow_dispatch: # 支持在 GitHub Actions 页面手动点击触发
+
+jobs:
+  sync:
+    name: Sync with Upstream
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout main branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Sync upstream changes
+        id: sync
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          echo "Adding upstream remote..."
+          git remote add upstream https://github.com/czg86389-hub/muse2api.git
+          git fetch upstream main
+
+          # 检查是否有新提交需要同步
+          LOCAL_COMMIT=$(git rev-parse HEAD)
+          UPSTREAM_COMMIT=$(git rev-parse upstream/main)
+
+          if [ "$LOCAL_COMMIT" = "$UPSTREAM_COMMIT" ]; then
+            echo "Already up to date with upstream."
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Merging upstream changes..."
+          # 优先 fast-forward，如有本地修改则保留本地并合并
+          git merge upstream/main --no-edit -m "chore(sync): merge upstream changes"
+
+          git push origin main
+          echo "has_changes=true" >> "$GITHUB_OUTPUT"
